@@ -1,169 +1,76 @@
-# AWS Project 
- Creating a web application for a unicorn ride-sharing service called Wild Rydes (from the original [Amazon workshop](https://aws.amazon.com/serverless-workshops)).  The app uses IAM, Amplify, Cognito, Lambda, API Gateway and DynamoDB, with code stored in GitHub and incorporated into a CI/CD pipeline with Amplify.
+#  WildRides – AWS Cloud Deployment
 
-The app will let you create an account and log in, then request a ride by clicking on a map (powered by ArcGIS).  The code can also be extended to build out more functionality.
+WildRides is a sample web application deployed using various AWS cloud services to demonstrate modern, scalable, and secure web architecture. This deployment showcases integration of serverless backend, authentication, and infrastructure management using AWS tools and services.
 
-## Cost
-All services used are eligible for the [AWS Free Tier](https://aws.amazon.com/free/).  Outside of the Free Tier, there may be small charges associated with building the app (less than $1 USD), but charges will continue to incur if you leave the app running.  Please see the end of the YouTube video for instructions on how to delete all resources used in the video.
+## 🌐 Overview
 
-## The Application Code
-The application code is here in this repository.
+The primary goal of this project was to deploy a production-ready web application using a fully managed, serverless AWS stack. Although the application code was pre-built, the focus of the project was on **infrastructure, deployment, and secure access configuration** using the following AWS services:
 
-## The Lambda Function Code
-Here is the code for the Lambda function, originally taken from the [AWS workshop](https://aws.amazon.com/getting-started/hands-on/build-serverless-web-app-lambda-apigateway-s3-dynamodb-cognito/module-3/ ), and updated for Node 20.x:
+## 🛠️ Services & Architecture
 
-```node
-import { randomBytes } from 'crypto';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
+###  AWS IAM (Identity and Access Management)
+- Configured **IAM roles and policies** to securely manage access to AWS services.
+- Assigned fine-grained permissions for users and services such as Lambda, Amplify, and DynamoDB.
+- Ensured only authorized resources could read/write to DynamoDB or trigger Lambda functions.
 
-const client = new DynamoDBClient({});
-const ddb = DynamoDBDocumentClient.from(client);
+###  Amazon DynamoDB
+- Used as the **NoSQL database** to store user interaction and ride-related data.
+- Configured read/write capacity modes for scalability.
+- Ensured fast, low-latency data storage without server management.
 
-const fleet = [
-    { Name: 'Angel', Color: 'White', Gender: 'Female' },
-    { Name: 'Mika', Color: 'White', Gender: 'Male' },
-    { Name: 'Sunday', Color: 'Yellow', Gender: 'Male' },
-    { Name: 'Robin', Color: 'Blue', Gender: 'Female' },
-];
+###  AWS Amplify
+- Used for **front-end hosting** and continuous deployment via GitHub integration.
+- Handled environment-based builds, enabling preview URLs and live updates after each push.
+- Automatically deployed API endpoints and linked backend services.
 
-export const handler = async (event, context) => {
-    if (!event.requestContext.authorizer) {
-        return errorResponse('Authorization not configured', context.awsRequestId);
-    }
+###  Amazon Cognito
+- Integrated for **user authentication and identity management**.
+- Handled sign-up, sign-in, and secure token-based access to backend resources.
+- Simplified the addition of user pools and federation with IAM roles for secure API calls.
 
-    const rideId = toUrlString(randomBytes(16));
-    console.log('Received event (', rideId, '): ', event);
+###  AWS Lambda (Optional)
+- Serverless compute used for backend logic (if applicable).
+- Configured to respond to API Gateway triggers or DynamoDB stream events.
+- Ensured no server provisioning with automatic scaling.
 
-    const username = event.requestContext.authorizer.claims['cognito:username'];
-    const requestBody = JSON.parse(event.body);
-    const pickupLocation = requestBody.PickupLocation;
-
-    const unicorn = findUnicorn(pickupLocation);
-
-    try {
-        await recordRide(rideId, username, unicorn);
-        return {
-            statusCode: 201,
-            body: JSON.stringify({
-                RideId: rideId,
-                Unicorn: unicorn,
-                Eta: '30 seconds',
-                Rider: username,
-            }),
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-            },
-        };
-    } catch (err) {
-        console.error(err);
-        return errorResponse(err.message, context.awsRequestId);
-    }
-};
-
-function findUnicorn(pickupLocation) {
-    console.log('Finding unicorn for', pickupLocation.Latitude, ',', pickupLocation.Longitude);
-
-    function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371; // Radius of the Earth in km
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c; // Distance in km
-    }
-
-    let closestUnicorn = null;
-    let shortestDistance = Infinity;
-
-    for (const unicorn of fleet) {
-        const distance = getDistance(
-            pickupLocation.Latitude, pickupLocation.Longitude,
-            unicorn.Latitude, unicorn.Longitude
-        );
-        if (distance < shortestDistance) {
-            shortestDistance = distance;
-            closestUnicorn = unicorn;
-        }
-    }
-
-    return closestUnicorn;
-}
-
-
-async function recordRide(rideId, username, unicorn) {
-    const params = {
-        TableName: 'rides',
-        Item: {
-            RideId: rideId,
-            User: username,
-            Unicorn: unicorn,
-            RequestTime: new Date().toISOString(),
-        },
-    };
-    await ddb.send(new PutCommand(params));
-}
-
-function toUrlString(buffer) {
-    return buffer.toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=/g, '');
-}
-
-function errorResponse(errorMessage, awsRequestId) {
-    return {
-        statusCode: 500,
-        body: JSON.stringify({
-            Error: errorMessage,
-            Reference: awsRequestId,
-        }),
-        headers: {
-            'Access-Control-Allow-Origin': '*',
-        },
-    };
-}
+##  Project Structure
 
 ```
-
-## The Lambda Function Test Function
-Here is the code used to test the Lambda function:
-
-```json
-function findUnicorn(pickupLocation) {
-    console.log('Finding unicorn for', pickupLocation.Latitude, ',', pickupLocation.Longitude);
-
-    function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371; // Radius of the Earth in km
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c; // Distance in km
-    }
-
-    let closestUnicorn = null;
-    let shortestDistance = Infinity;
-
-    for (const unicorn of fleet) {
-        const distance = getDistance(
-            pickupLocation.Latitude, pickupLocation.Longitude,
-            unicorn.Latitude, unicorn.Longitude
-        );
-        if (distance < shortestDistance) {
-            shortestDistance = distance;
-            closestUnicorn = unicorn;
-        }
-    }
-
-    return closestUnicorn;
-}
-
+/wildrides-aws/
+├── amplify/
+├── backend/
+├── iam-policies/
+├── cognito-config/
+├── dynamodb-schema/
+├── README.md
 ```
 
+##  How to Deploy (High-Level)
+
+1. **Fork or Clone** the WildRides frontend repo (if needed).
+2. **Connect GitHub to AWS Amplify** for automatic deployment.
+3. **Configure IAM roles** for backend access (DynamoDB, Lambda, etc.).
+4. **Set up Cognito user pools** and authentication settings.
+5. **Deploy DynamoDB tables** and link to backend logic if needed.
+6. **Monitor deployment** via AWS Amplify console.
+
+##  Outcome
+
+- Successfully deployed and hosted a dynamic web app on AWS.
+- Secured backend access using IAM and Cognito.
+- Leveraged Amplify’s CI/CD capabilities for version-controlled updates.
+- Managed a scalable backend with serverless services and DynamoDB.
+
+##  Tools & Technologies
+
+- **AWS Amplify** – Front-end hosting and deployment  
+- **AWS IAM** – Role-based access and security  
+- **Amazon Cognito** – User authentication and identity control  
+- **Amazon DynamoDB** – NoSQL database for ride/user data  
+- **AWS Lambda** – Serverless backend compute  
+- **GitHub** – Version control and CI/CD integration  
+
+
+##  Source Code
+
+🔗 [GitHub Repository](https://github.com/machadop1407/pedrotech-portfolio)

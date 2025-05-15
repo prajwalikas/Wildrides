@@ -1,8 +1,4 @@
 # AWS Project 
-
-This repo contains the code files used in this [YouTube video](https://youtu.be/K6v6t5z6AsU).
-
-## TL;DR
  Creating a web application for a unicorn ride-sharing service called Wild Rydes (from the original [Amazon workshop](https://aws.amazon.com/serverless-workshops)).  The app uses IAM, Amplify, Cognito, Lambda, API Gateway and DynamoDB, with code stored in GitHub and incorporated into a CI/CD pipeline with Amplify.
 
 The app will let you create an account and log in, then request a ride by clicking on a map (powered by ArcGIS).  The code can also be extended to build out more functionality.
@@ -26,8 +22,9 @@ const ddb = DynamoDBDocumentClient.from(client);
 
 const fleet = [
     { Name: 'Angel', Color: 'White', Gender: 'Female' },
-    { Name: 'Gil', Color: 'White', Gender: 'Male' },
-    { Name: 'Rocinante', Color: 'Yellow', Gender: 'Female' },
+    { Name: 'Mika', Color: 'White', Gender: 'Male' },
+    { Name: 'Sunday', Color: 'Yellow', Gender: 'Male' },
+    { Name: 'Robin', Color: 'Blue', Gender: 'Female' },
 ];
 
 export const handler = async (event, context) => {
@@ -65,13 +62,41 @@ export const handler = async (event, context) => {
 };
 
 function findUnicorn(pickupLocation) {
-    console.log('Finding unicorn for ', pickupLocation.Latitude, ', ', pickupLocation.Longitude);
-    return fleet[Math.floor(Math.random() * fleet.length)];
+    console.log('Finding unicorn for', pickupLocation.Latitude, ',', pickupLocation.Longitude);
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; // Radius of the Earth in km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // Distance in km
+    }
+
+    let closestUnicorn = null;
+    let shortestDistance = Infinity;
+
+    for (const unicorn of fleet) {
+        const distance = getDistance(
+            pickupLocation.Latitude, pickupLocation.Longitude,
+            unicorn.Latitude, unicorn.Longitude
+        );
+        if (distance < shortestDistance) {
+            shortestDistance = distance;
+            closestUnicorn = unicorn;
+        }
+    }
+
+    return closestUnicorn;
 }
+
 
 async function recordRide(rideId, username, unicorn) {
     const params = {
-        TableName: 'Rides',
+        TableName: 'rides',
         Item: {
             RideId: rideId,
             User: username,
@@ -101,30 +126,44 @@ function errorResponse(errorMessage, awsRequestId) {
         },
     };
 }
+
 ```
 
 ## The Lambda Function Test Function
 Here is the code used to test the Lambda function:
 
 ```json
-{
-    "path": "/ride",
-    "httpMethod": "POST",
-    "headers": {
-        "Accept": "*/*",
-        "Authorization": "eyJraWQiOiJLTzRVMWZs",
-        "content-type": "application/json; charset=UTF-8"
-    },
-    "queryStringParameters": null,
-    "pathParameters": null,
-    "requestContext": {
-        "authorizer": {
-            "claims": {
-                "cognito:username": "the_username"
-            }
+function findUnicorn(pickupLocation) {
+    console.log('Finding unicorn for', pickupLocation.Latitude, ',', pickupLocation.Longitude);
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371; // Radius of the Earth in km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c; // Distance in km
+    }
+
+    let closestUnicorn = null;
+    let shortestDistance = Infinity;
+
+    for (const unicorn of fleet) {
+        const distance = getDistance(
+            pickupLocation.Latitude, pickupLocation.Longitude,
+            unicorn.Latitude, unicorn.Longitude
+        );
+        if (distance < shortestDistance) {
+            shortestDistance = distance;
+            closestUnicorn = unicorn;
         }
-    },
-    "body": "{\"PickupLocation\":{\"Latitude\":47.6174755835663,\"Longitude\":-122.28837066650185}}"
+    }
+
+    return closestUnicorn;
 }
+
 ```
 
